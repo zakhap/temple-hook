@@ -46,7 +46,7 @@ Other than writing unit tests (recommended!), you can only deploy & test hooks o
 
 ```bash
 # start anvil, a local EVM chain
-anvil
+anvil --disable-code-size-limit 
 
 # in a new terminal
 forge script script/Anvil.s.sol \
