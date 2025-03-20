@@ -107,7 +107,7 @@ contract SimpleTempleHook is BaseHook {
                 beforeInitialize: false,
                 afterInitialize: false,
                 beforeAddLiquidity: false,
-                afterAddLiquidity: true,
+                afterAddLiquidity: false,
                 beforeRemoveLiquidity: false,
                 afterRemoveLiquidity: false,
                 beforeSwap: true,
