@@ -12,8 +12,20 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {TempleToken} from "./TempleToken.sol";
 
-
-
+/**
+ * @title SimpleTempleHook
+ * @notice A Uniswap v4 hook that collects charitable donations from swap transactions
+ * @dev This hook implements a fee mechanism that takes a small percentage (default 0.01%)
+ * from each swap transaction and sends it to a designated charity address (QUBIT_ADDRESS).
+ * 
+ * The hook uses Uniswap v4's custom accounting system to:
+ * 1. Calculate a donation amount based on the swap size
+ * 2. Collect the donation using BeforeSwapDelta mechanism
+ * 3. Track all donations through events for transparency
+ * 
+ * The donation percentage can be adjusted by the donation manager, up to a maximum of 1%.
+ * The hook requires hookData to contain the end user's address for proper attribution.
+ */
 contract SimpleTempleHook is BaseHook {
     address internal immutable QUBIT_ADDRESS;
     address private _donationManager;
