@@ -7,7 +7,7 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {TempleToken} from "./TempleToken.sol";
@@ -27,6 +27,8 @@ import {TempleToken} from "./TempleToken.sol";
  * The hook requires hookData to contain the end user's address for proper attribution.
  */
 contract SimpleTempleHook is BaseHook {
+    using CurrencyLibrary for Currency;
+    
     address internal immutable QUBIT_ADDRESS;
     address private _donationManager;
     uint256 private _hookDonationPercentage = 10; // 0.01% default donation
@@ -54,7 +56,7 @@ contract SimpleTempleHook is BaseHook {
 
     // Function to update donation percentage (restricted to donation manager)
     function setDonationPercentage(uint256 newDonationPercentage) external onlyDonationManager {
-        require(newDonationPercentage <= 1000, "Donation too high"); // Max 1% (1000/100000)
+        require(newDonationPercentage <= 3000, "Donation too high"); // Max 3% (3000/100000)
         _hookDonationPercentage = newDonationPercentage;
         emit DonationPercentageUpdated(newDonationPercentage);
     }
@@ -84,15 +86,12 @@ contract SimpleTempleHook is BaseHook {
     }
 
 
-    // do i need this?
-    function getHookData(address user) public pure returns (bytes memory) {
-        return abi.encode(user);
-    }
 
     // gets user address from HookData, for emitting event
     function parseHookData(
         bytes calldata data
     ) public pure returns (address user) {
+        require(data.length > 0, "Empty hook data");
         return abi.decode(data, (address));
     }
 
@@ -121,37 +120,41 @@ contract SimpleTempleHook is BaseHook {
             });
     }
 
-    // take fee, emit event
+    // take fee before swap is executed
     function _beforeSwap(
-        address sender,
+        address, /* sender */
         PoolKey calldata key,
         IPoolManager.SwapParams calldata params,
         bytes calldata hookData
     ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-        // Extract the user address from hookData
-        address user = parseHookData(hookData);
+        // Extract user address from hookData for event (optional)
+        address user = hookData.length >= 20 ? abi.decode(hookData, (address)) : sender;
         
-        // Calculate absolute swap amount (convert negative to positive)
-        uint256 swapAmount = params.amountSpecified < 0
-            ? uint256(-params.amountSpecified)
+        // Calculate donation based on swap amount
+        uint256 swapAmount = params.amountSpecified < 0 
+            ? uint256(-params.amountSpecified) 
             : uint256(params.amountSpecified);
-        
-        // Calculate donation amount based on percentage
         uint256 donationAmount = (swapAmount * _hookDonationPercentage) / DONATION_DENOMINATOR;
         
-        // Determine which currency the donation should be taken in
+        // Only proceed if donation amount is meaningful
+        if (donationAmount == 0) {
+            return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+        
+        // Determine donation currency based on swap direction
+        // Take donation from the input currency (what user is paying)
         Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         
-        // Take the donation by creating a debt for our hook in the specified currency
+        // Take the donation from the pool to the charity address
         poolManager.take(donationCurrency, QUBIT_ADDRESS, donationAmount);
         
-        // Create BeforeSwapDelta to transfer the hook's delta to the swap router
+        // Create BeforeSwapDelta to account for the donation
         BeforeSwapDelta returnDelta = toBeforeSwapDelta(
-            int128(int256(donationAmount)), // Specified delta (donation amount)
-            0                               // Unspecified delta (no change)
+            int128(int256(donationAmount)), // Specified delta (donation amount taken)
+            0                               // Unspecified delta
         );
         
-        // Add event emission for donation collection tracking
+        // Emit event for donation tracking
         emit CharitableDonationTaken(user, key.toId(), donationCurrency, donationAmount);
         
         return (BaseHook.beforeSwap.selector, returnDelta, 0);
