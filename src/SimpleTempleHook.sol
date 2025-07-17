@@ -18,10 +18,13 @@ import {TempleToken} from "./TempleToken.sol";
  * @dev This hook implements a fee mechanism that takes a small percentage (default 0.01%)
  * from each swap transaction and sends it to a designated charity address (QUBIT_ADDRESS).
  * 
- * The hook uses Uniswap v4's custom accounting system to:
- * 1. Calculate a donation amount based on the swap size
- * 2. Collect the donation using BeforeSwapDelta mechanism
- * 3. Track all donations through events for transparency
+ * The hook uses Uniswap v4's delta accounting system properly:
+ * 1. beforeSwap: Calculate donation amount and return BeforeSwapDelta indicating hook receives donation
+ * 2. afterSwap: Transfer the collected donation to the charity address using poolManager.take()
+ * 3. Event emission for full transparency of all donations
+ * 
+ * This approach ensures users only pay the intended donation amount (no double deduction)
+ * while the charity receives the donations through proper Uniswap v4 accounting.
  * 
  * The donation percentage can be adjusted by the donation manager, up to a maximum of 1%.
  * The hook requires hookData to contain the end user's address for proper attribution.
@@ -31,7 +34,7 @@ contract SimpleTempleHook is BaseHook {
     
     address internal immutable QUBIT_ADDRESS;
     address private _donationManager;
-    uint256 private _hookDonationPercentage = 10; // 0.01% default donation
+    uint256 private _hookDonationPercentage = 1; // 0.01% default donation (1/100000)
     uint256 private constant DONATION_DENOMINATOR = 100000;
 
     event CharitableDonationTaken(
@@ -110,10 +113,10 @@ contract SimpleTempleHook is BaseHook {
                 beforeRemoveLiquidity: false,
                 afterRemoveLiquidity: false,
                 beforeSwap: true,
-                afterSwap: false,
+                afterSwap: true,
                 beforeDonate: false,
                 afterDonate: false,
-                beforeSwapReturnDelta: false,
+                beforeSwapReturnDelta: true,
                 afterSwapReturnDelta: false,
                 afterAddLiquidityReturnDelta: false,
                 afterRemoveLiquidityReturnDelta: false
@@ -158,5 +161,29 @@ contract SimpleTempleHook is BaseHook {
         emit CharitableDonationTaken(user, key.toId(), donationCurrency, donationAmount);
         
         return (BaseHook.beforeSwap.selector, returnDelta, 0);
+    }
+
+    // Transfer collected donations to charity after swap
+    function _afterSwap(
+        address sender,
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata hookData
+    ) internal override returns (bytes4, int128) {
+        // Determine which currency was used for the donation
+        Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
+        
+        // Calculate the same donation amount as in beforeSwap
+        uint256 swapAmount = params.amountSpecified < 0
+            ? uint256(-params.amountSpecified)
+            : uint256(params.amountSpecified);
+        uint256 donationAmount = (swapAmount * _hookDonationPercentage) / DONATION_DENOMINATOR;
+        
+        // Transfer the collected donation to the charity address
+        // The hook should have received the donation amount via BeforeSwapDelta
+        poolManager.take(donationCurrency, QUBIT_ADDRESS, donationAmount);
+        
+        return (BaseHook.afterSwap.selector, 0);
     }
 }
