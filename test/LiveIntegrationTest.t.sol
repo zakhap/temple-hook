@@ -23,7 +23,7 @@ import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 contract LiveIntegrationTest is Test {
     // Update these addresses after deployment
     address constant POOL_MANAGER = 0x5FbDB2315678afecb367f032d93F642f64180aa3;
-    address constant SIMPLE_TEMPLE_HOOK = 0x5a2c959bf7c81c33ad97c0345ab3b15c8fef5b8c;
+    address constant SIMPLE_TEMPLE_HOOK = 0x5a2C959bf7c81c33AD97c0345aB3b15c8fEF5B8c;
     address constant T3MPL3_TOKEN = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
     address constant WETH_TOKEN = 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9;
     address constant SWAP_ROUTER = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
@@ -122,7 +122,7 @@ contract LiveIntegrationTest is Test {
         
         vm.stopPrank();
         
-        console.log("✅ Security controls working correctly");
+        console.log("Security controls working correctly");
     }
     
     function testLiveDonationCapEnforcement() public {
@@ -143,7 +143,7 @@ contract LiveIntegrationTest is Test {
         
         vm.stopPrank();
         
-        console.log("✅ Donation cap enforcement working correctly");
+        console.log("Donation cap enforcement working correctly");
     }
     
     function testLiveTokenTransfers() public {
@@ -188,7 +188,7 @@ contract LiveIntegrationTest is Test {
                 eventFound = true;
                 uint256 emittedPercentage = abi.decode(logs[i].data, (uint256));
                 assertEq(emittedPercentage, newPercentage, "Event should emit correct percentage");
-                console.log("✅ DonationPercentageUpdated event emitted with value:", emittedPercentage);
+                console.log("DonationPercentageUpdated event emitted with value:", emittedPercentage);
                 break;
             }
         }
@@ -232,6 +232,6 @@ contract LiveIntegrationTest is Test {
         
         assertEq(hook.getDonationManager(), originalManager, "Manager should be transferred back");
         
-        console.log("✅ Manager transfer working correctly");
+        console.log("Manager transfer working correctly");
     }
 }

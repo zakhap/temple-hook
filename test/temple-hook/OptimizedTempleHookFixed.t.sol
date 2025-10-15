@@ -20,7 +20,7 @@ import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol
 import {EasyPosm} from "../utils/EasyPosm.sol";
 import {Fixtures} from "../utils/Fixtures.sol";
 
-import {OptimizedTempleHook} from "../../OptimizedTempleHook.sol";
+import {OptimizedTempleHook} from "../../src/OptimizedTempleHook.sol";
 
 /// @title OptimizedTempleHook Core Functionality Tests
 /// @notice Comprehensive test suite for donation collection mechanism

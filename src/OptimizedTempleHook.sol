@@ -52,6 +52,11 @@ contract OptimizedTempleHook is BaseHook {
     bool public emergencyPaused;
     address public guardian;
     
+    // Temporary storage for donation info between hooks
+    uint256 private _tempDonationAmount;
+    Currency private _tempDonationCurrency;
+    address private _tempDonationUser;
+    
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -169,7 +174,7 @@ contract OptimizedTempleHook is BaseHook {
     }
     
     function _beforeSwap(
-        address,
+        address sender,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata params,
         bytes calldata hookData
@@ -183,7 +188,7 @@ contract OptimizedTempleHook is BaseHook {
         }
         
         // Parse user address safely
-        address user = _parseUserAddress(hookData);
+        address user = hookData.length >= 20 ? abi.decode(hookData, (address)) : sender;
         
         // Calculate donation on INPUT token (always the specified token for exactInput swaps)
         uint256 swapAmount = params.amountSpecified < 0 
@@ -197,30 +202,19 @@ contract OptimizedTempleHook is BaseHook {
             return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
         
-        // Calculate delta for donation collection
-        BeforeSwapDelta delta;
-        if (params.amountSpecified < 0) {
-            // Exact input: take donation from the input currency
-            if (params.zeroForOne) {
-                // ETH->Temple: take donation from ETH (currency0)
-                delta = toBeforeSwapDelta(donationAmount.toInt128(), 0);
-            } else {
-                // Temple->ETH: take donation from Temple (currency1) 
-                delta = toBeforeSwapDelta(0, donationAmount.toInt128());
-            }
-        } else {
-            // Exact output: increase input requirement by donation
-            if (params.zeroForOne) {
-                // ETH->Temple: require more ETH input
-                delta = toBeforeSwapDelta(donationAmount.toInt128(), 0);
-            } else {
-                // Temple->ETH: require more Temple input
-                delta = toBeforeSwapDelta(0, donationAmount.toInt128());
-            }
-        }
+        // Determine donation currency (always input currency)
+        Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         
-        // Store donation info for afterSwap (gas-efficient)
-        _storeDonationInfo(poolId, donationAmount, user);
+        // MINT: Credit hook with donation amount
+        poolManager.mint(address(this), donationCurrency.toId(), donationAmount);
+        
+        // BEFORE_SWAP_DELTA: Simple - always take from input currency
+        BeforeSwapDelta delta = toBeforeSwapDelta(donationAmount.toInt128(), 0);
+        
+        // Store donation info for afterSwap (simple approach)
+        _tempDonationAmount = donationAmount;
+        _tempDonationCurrency = donationCurrency;
+        _tempDonationUser = user;
         
         return (BaseHook.beforeSwap.selector, delta, 0);
     }
@@ -234,28 +228,29 @@ contract OptimizedTempleHook is BaseHook {
     ) internal override returns (bytes4, int128) {
         PoolId poolId = key.toId();
         
-        // Retrieve stored donation info
-        (uint256 donationAmount, address user) = _getDonationInfo(poolId);
-        
-        if (donationAmount > 0) {
-            // Determine donation currency (always input token)
-            Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
+        // Only proceed if we have a donation to process
+        if (_tempDonationAmount > 0) {
+            // BURN: Remove credits from hook's account
+            poolManager.burn(address(this), _tempDonationCurrency.toId(), _tempDonationAmount);
             
-            // Transfer donation to charity
-            poolManager.take(donationCurrency, CHARITY_ADDRESS, donationAmount);
+            // TAKE: Transfer actual tokens to charity
+            poolManager.take(_tempDonationCurrency, CHARITY_ADDRESS, _tempDonationAmount);
             
-            // Clean up storage
-            _clearDonationInfo(poolId);
-            
+            // EMIT: Event with user attribution
             emit CharitableDonationCollected(
-                user,
+                _tempDonationUser,
                 poolId,
-                donationCurrency,
-                donationAmount,
+                _tempDonationCurrency,
+                _tempDonationAmount,
                 params.amountSpecified < 0 
                     ? uint256(-params.amountSpecified)
                     : uint256(params.amountSpecified)
             );
+            
+            // Clean up temporary storage
+            _tempDonationAmount = 0;
+            _tempDonationCurrency = Currency.wrap(address(0));
+            _tempDonationUser = address(0);
         }
         
         return (BaseHook.afterSwap.selector, 0);
@@ -319,29 +314,7 @@ contract OptimizedTempleHook is BaseHook {
         return (swapAmount * donationBps) / DONATION_DENOMINATOR;
     }
     
-    function _parseUserAddress(bytes calldata hookData) internal pure returns (address) {
-        if (hookData.length != 32) revert InvalidHookData();
-        return abi.decode(hookData, (address));
-    }
-    
-    // Efficient storage pattern for donation info
-    mapping(PoolId => bytes32) private _donationStorage;
-    
-    function _storeDonationInfo(PoolId poolId, uint256 amount, address user) private {
-        _donationStorage[poolId] = bytes32(
-            (uint256(uint160(user)) << 96) | amount
-        );
-    }
-    
-    function _getDonationInfo(PoolId poolId) private view returns (uint256 amount, address user) {
-        bytes32 data = _donationStorage[poolId];
-        amount = uint256(data) & ((1 << 96) - 1);
-        user = address(uint160(uint256(data) >> 96));
-    }
-    
-    function _clearDonationInfo(PoolId poolId) private {
-        delete _donationStorage[poolId];
-    }
+    // Removed complex storage system - using simple temp variables instead
     
     /*//////////////////////////////////////////////////////////////
                             VIEW FUNCTIONS

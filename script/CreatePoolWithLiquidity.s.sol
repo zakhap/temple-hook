@@ -30,19 +30,23 @@ contract CreatePoolWithLiquidityScript is Script, Constants {
     int24 tickLower = TickMath.minUsableTick(tickSpacing);
     int24 tickUpper = TickMath.maxUsableTick(tickSpacing);
 
-    // Contract addresses (SEPOLIA DEPLOYMENT)
-    address constant T3MPL3_TOKEN = 0x4f4a372fb9635e555Aa2Ede24C3b32740fb7bF39;
-    address constant SIMPLE_TEMPLE_HOOK = 0x30162ab2ad00a57Ce848A3d8F8Df5aE8f8aF4088;
+    // Contract addresses from environment variables
 
     function run() external {
-        console.log("=== CREATING ETH/T3MPL3 POOL WITH LIQUIDITY ===");
+        console.log("=== CREATING ETH/TEMPLE POOL WITH LIQUIDITY ===");
         console.log("ETH amount:", ethAmount);
-        console.log("T3MPL3 amount:", t3mpl3Amount / 10**18, "tokens");
-        console.log("Hook address:", SIMPLE_TEMPLE_HOOK);
+        console.log("Temple amount:", t3mpl3Amount / 10**18, "tokens");
+        
+        // Get deployed addresses from environment variables
+        address templeToken = vm.envAddress("TEMPLE_TOKEN_ADDRESS");
+        address optimizedHook = vm.envAddress("OPTIMIZED_HOOK_ADDRESS");
+        
+        console.log("Temple token:", templeToken);
+        console.log("Hook address:", optimizedHook);
 
         // Setup currencies (ETH always sorts before other tokens)
         Currency currency0 = Currency.wrap(address(0)); // ETH
-        Currency currency1 = Currency.wrap(T3MPL3_TOKEN); // T3MPL3
+        Currency currency1 = Currency.wrap(templeToken); // Temple
 
         // Create pool key
         PoolKey memory poolKey = PoolKey({
@@ -50,12 +54,12 @@ contract CreatePoolWithLiquidityScript is Script, Constants {
             currency1: currency1,
             fee: lpFee,
             tickSpacing: tickSpacing,
-            hooks: IHooks(SIMPLE_TEMPLE_HOOK)
+            hooks: IHooks(optimizedHook)
         });
 
         console.log("Pool Key:");
         console.log("  currency0 (ETH):", Currency.unwrap(currency0));
-        console.log("  currency1 (T3MPL3):", Currency.unwrap(currency1));
+        console.log("  currency1 (Temple):", Currency.unwrap(currency1));
         console.log("  fee:", lpFee);
         console.log("  tickSpacing:", uint256(uint24(tickSpacing)));
 
@@ -68,9 +72,9 @@ contract CreatePoolWithLiquidityScript is Script, Constants {
         // Step 2: Pool already exists - just add more liquidity
         console.log("Pool already exists - adding liquidity to existing pool");
 
-        // Step 3: Approve T3MPL3 tokens for liquidity router
-        IERC20(T3MPL3_TOKEN).approve(address(lpRouter), t3mpl3Amount);
-        console.log("T3MPL3 tokens approved for liquidity router");
+        // Step 3: Approve Temple tokens for liquidity router
+        IERC20(templeToken).approve(address(lpRouter), t3mpl3Amount);
+        console.log("Temple tokens approved for liquidity router");
 
         // Step 4: Calculate proper liquidity delta based on token amounts
         // Use LiquidityAmounts library to get correct liquidity for our token amounts
@@ -99,15 +103,15 @@ contract CreatePoolWithLiquidityScript is Script, Constants {
         vm.stopBroadcast();
 
         console.log("=== POOL CREATION COMPLETE ===");
-        console.log("Pool created with SimpleTempleHook");
-        console.log("Liquidity added: 0.01 ETH + 100K T3MPL3 tokens");
+        console.log("Pool created with OptimizedTempleHook");
+        console.log("Liquidity added: 0.01 ETH + 100K Temple tokens");
         console.log("Pool is ready for swaps!");
         
         // Display pool information
         console.log("\n=== POOL INFORMATION ===");
         console.log("PoolManager:", address(POOLMANAGER));
         console.log("LiquidityRouter:", address(lpRouter));
-        console.log("T3MPL3 Token:", T3MPL3_TOKEN);
-        console.log("SimpleTempleHook:", SIMPLE_TEMPLE_HOOK);
+        console.log("Temple Token:", templeToken);
+        console.log("OptimizedTempleHook:", optimizedHook);
     }
 }

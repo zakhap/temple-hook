@@ -16,19 +16,22 @@ import {Constants} from "./base/Constants.sol";
 contract SimpleSwapScript is Script, Constants {
     using CurrencyLibrary for Currency;
 
-    // Contract addresses (SEPOLIA DEPLOYMENT)
-    address constant T3MPL3_TOKEN = 0x4f4a372fb9635e555Aa2Ede24C3b32740fb7bF39;
-    address constant SIMPLE_TEMPLE_HOOK = 0x30162ab2ad00a57Ce848A3d8F8Df5aE8f8aF4088;
+    // Contract addresses from environment variables
 
     function run() external {
-        console.log("=== SIMPLE ETH to T3MPL3 SWAP ===");
+        console.log("=== SIMPLE ETH to TEMPLE SWAP ===");
         console.log("Swapper:", msg.sender);
-        console.log("T3MPL3 Token:", T3MPL3_TOKEN);
-        console.log("Temple Hook:", SIMPLE_TEMPLE_HOOK);
+        
+        // Get deployed addresses from environment variables
+        address templeToken = vm.envAddress("TEMPLE_TOKEN_ADDRESS");
+        address optimizedHook = vm.envAddress("OPTIMIZED_HOOK_ADDRESS");
+        
+        console.log("Temple Token:", templeToken);
+        console.log("Temple Hook:", optimizedHook);
 
         // Setup currencies
         Currency currency0 = Currency.wrap(address(0)); // ETH
-        Currency currency1 = Currency.wrap(T3MPL3_TOKEN); // T3MPL3
+        Currency currency1 = Currency.wrap(templeToken); // Temple
 
         // Create pool key
         PoolKey memory poolKey = PoolKey({
@@ -36,7 +39,7 @@ contract SimpleSwapScript is Script, Constants {
             currency1: currency1,
             fee: 3000,
             tickSpacing: 60,
-            hooks: IHooks(SIMPLE_TEMPLE_HOOK)
+            hooks: IHooks(optimizedHook)
         });
 
         vm.startBroadcast();
@@ -47,18 +50,19 @@ contract SimpleSwapScript is Script, Constants {
 
         // Check balances before swap
         uint256 ethBalanceBefore = msg.sender.balance;
-        uint256 t3mpl3BalanceBefore = IERC20(T3MPL3_TOKEN).balanceOf(msg.sender);
+        uint256 templeBalanceBefore = IERC20(templeToken).balanceOf(msg.sender);
         console.log("ETH balance before:", ethBalanceBefore);
-        console.log("T3MPL3 balance before:", t3mpl3BalanceBefore / 10**18, "tokens");
+        console.log("Temple balance before (raw):", templeBalanceBefore);
+        console.log("Temple balance before (display):", templeBalanceBefore / 10**18, "tokens");
 
-        // Swap amount (adjust as needed)  
-        uint256 swapAmount = 0.000001 ether; // 0.000001 ETH (tiny amount for testing)
-        console.log("Swapping", swapAmount, "ETH for T3MPL3...");
+        // Swap amount (larger amount for successful settlement)  
+        uint256 swapAmount = 0.001 ether; // 0.001 ETH (1000x larger for testing)
+        console.log("Swapping", swapAmount, "ETH for Temple...");
 
-        // Create swap parameters
+        // Create swap parameters (exactInput with negative amount)
         IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
-            zeroForOne: true, // ETH to T3MPL3
-            amountSpecified: int256(swapAmount),
+            zeroForOne: true, // ETH to Temple
+            amountSpecified: -int256(swapAmount), // Negative for exactInput
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1 // No price limit
         });
 
@@ -75,18 +79,29 @@ contract SimpleSwapScript is Script, Constants {
             
             // Check balances after swap
             uint256 ethBalanceAfter = msg.sender.balance;
-            uint256 t3mpl3BalanceAfter = IERC20(T3MPL3_TOKEN).balanceOf(msg.sender);
+            uint256 templeBalanceAfter = IERC20(templeToken).balanceOf(msg.sender);
             
             console.log("ETH balance after:", ethBalanceAfter);
-            console.log("T3MPL3 balance after:", t3mpl3BalanceAfter / 10**18, "tokens");
+            console.log("Temple balance after (raw):", templeBalanceAfter);
+            console.log("Temple balance after (display):", templeBalanceAfter / 10**18, "tokens");
             
             uint256 ethUsed = ethBalanceBefore - ethBalanceAfter;
-            uint256 t3mpl3Received = t3mpl3BalanceAfter - t3mpl3BalanceBefore;
+            uint256 templeReceived = templeBalanceAfter - templeBalanceBefore;
             
-            console.log("ETH used:", ethUsed);
-            console.log("T3MPL3 received:", t3mpl3Received / 10**18, "tokens");
-            console.log("Rate: 1 ETH =", (t3mpl3Received * 1e18) / ethUsed / 10**18, "T3MPL3");
+            console.log("=== RAW SWAP RESULTS ===");
+            console.log("ETH used (raw wei):", ethUsed);
+            console.log("Temple received (raw wei):", templeReceived);
+            console.log("Temple received (display):", templeReceived / 10**18, "tokens");
             
+            if (templeReceived > 0) {
+                console.log("Rate: 1 ETH =", (templeReceived * 1e18) / ethUsed / 10**18, "Temple");
+                console.log("TEMPLE TOKENS WERE RECEIVED!");
+            } else {
+                console.log("NO TEMPLE TOKENS RECEIVED");
+            }
+            
+        } catch Error(string memory reason) {
+            console.log("ERROR: Swap failed with reason:", reason);
         } catch {
             console.log("ERROR: Swap failed - likely insufficient liquidity");
             console.log("Try a larger swap amount or add more liquidity to the pool");

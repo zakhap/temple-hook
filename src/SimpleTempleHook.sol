@@ -36,6 +36,11 @@ contract SimpleTempleHook is BaseHook {
     address private _donationManager;
     uint256 private _hookDonationPercentage = 1; // 0.01% default donation (1/100000)
     uint256 private constant DONATION_DENOMINATOR = 100000;
+    
+    // Temporary storage for donation info between hooks
+    uint256 private _tempDonationAmount;
+    Currency private _tempDonationCurrency;
+    address private _tempDonationUser;
 
     event CharitableDonationTaken(
       address indexed user,
@@ -123,9 +128,9 @@ contract SimpleTempleHook is BaseHook {
             });
     }
 
-    // take fee before swap is executed
+    // Collect donation using mint/burn/take pattern
     function _beforeSwap(
-        address, /* sender */
+        address sender,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata params,
         bytes calldata hookData
@@ -148,17 +153,19 @@ contract SimpleTempleHook is BaseHook {
         // Take donation from the input currency (what user is paying)
         Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         
-        // Take the donation from the pool to the charity address
-        poolManager.take(donationCurrency, QUBIT_ADDRESS, donationAmount);
+        // MINT: Credit hook with donation amount
+        poolManager.mint(address(this), donationCurrency.toId(), donationAmount);
         
-        // Create BeforeSwapDelta to account for the donation
+        // Create BeforeSwapDelta to tell PoolManager to charge user for this credit
         BeforeSwapDelta returnDelta = toBeforeSwapDelta(
-            int128(int256(donationAmount)), // Specified delta (donation amount taken)
-            0                               // Unspecified delta
+            int128(int256(donationAmount)), // Hook receives donation amount
+            0                               // No change to unspecified token
         );
         
-        // Emit event for donation tracking
-        emit CharitableDonationTaken(user, key.toId(), donationCurrency, donationAmount);
+        // Store donation info for afterSwap (simple approach)
+        _tempDonationAmount = donationAmount;
+        _tempDonationCurrency = donationCurrency;
+        _tempDonationUser = user;
         
         return (BaseHook.beforeSwap.selector, returnDelta, 0);
     }
@@ -171,18 +178,22 @@ contract SimpleTempleHook is BaseHook {
         BalanceDelta delta,
         bytes calldata hookData
     ) internal override returns (bytes4, int128) {
-        // Determine which currency was used for the donation
-        Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
-        
-        // Calculate the same donation amount as in beforeSwap
-        uint256 swapAmount = params.amountSpecified < 0
-            ? uint256(-params.amountSpecified)
-            : uint256(params.amountSpecified);
-        uint256 donationAmount = (swapAmount * _hookDonationPercentage) / DONATION_DENOMINATOR;
-        
-        // Transfer the collected donation to the charity address
-        // The hook should have received the donation amount via BeforeSwapDelta
-        poolManager.take(donationCurrency, QUBIT_ADDRESS, donationAmount);
+        // Only proceed if we have a donation to process
+        if (_tempDonationAmount > 0) {
+            // BURN: Remove credits from hook's account
+            poolManager.burn(address(this), _tempDonationCurrency.toId(), _tempDonationAmount);
+            
+            // TAKE: Transfer actual tokens to charity
+            poolManager.take(_tempDonationCurrency, QUBIT_ADDRESS, _tempDonationAmount);
+            
+            // EMIT: Event with user attribution
+            emit CharitableDonationTaken(_tempDonationUser, key.toId(), _tempDonationCurrency, _tempDonationAmount);
+            
+            // Clean up temporary storage
+            _tempDonationAmount = 0;
+            _tempDonationCurrency = Currency.wrap(address(0));
+            _tempDonationUser = address(0);
+        }
         
         return (BaseHook.afterSwap.selector, 0);
     }

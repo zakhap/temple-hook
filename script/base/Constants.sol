@@ -9,8 +9,13 @@ import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol"
 contract Constants {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
 
-    /// @dev Official Uniswap v4 addresses on Sepolia testnet
-    IPoolManager constant POOLMANAGER = IPoolManager(address(0xE03A1074c86CFeDd5C142C4F04F1a1536e203543));
-    PositionManager constant posm = PositionManager(payable(address(0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4)));
+    /// @dev Official Uniswap v4 addresses on Base mainnet (Chain ID: 8453)
+    IPoolManager constant POOLMANAGER = IPoolManager(address(0x498581fF718922c3f8e6A244956aF099B2652b2b));
+    PositionManager constant posm = PositionManager(payable(address(0x7C5f5A4bBd8fD63184577525326123B519429bDc)));
     IAllowanceTransfer constant PERMIT2 = IAllowanceTransfer(address(0x000000000022D473030F116dDEE9F6B43aC78BA3));
+
+    /// @dev Additional Base mainnet v4 contracts (for reference)
+    // Universal Router: 0x6ff5693b99212da76ad316178a184ab56d299b43
+    // Quoter: 0x0d5e0f971ed27fbff6c2837bf31316121532048d
+    // StateView: 0xa3c0c9b65bad0b08107aa264b0f3db444b867a71
 }

@@ -8,8 +8,8 @@ import {ERC20} from "solmate/src/tokens/ERC20.sol";
 /// @notice Simple ERC20 token for OptimizedTempleHook testing
 contract TempleToken is ERC20 {
     constructor() ERC20("Temple Token", "TEMPLE", 18) {
-        // Mint 1 million tokens to deployer
-        _mint(msg.sender, 1_000_000 * 10**18);
+        // Mint 10 billion tokens to deployer  
+        _mint(msg.sender, 10_000_000_000 * 10**18);
     }
 }
 
@@ -28,6 +28,7 @@ contract DeployTempleTokenScript is Script {
         console.log("Temple Token deployed at:", address(temple));
         console.log("Total supply:", temple.totalSupply() / 10**18, "TEMPLE");
         console.log("Deployer balance:", temple.balanceOf(msg.sender) / 10**18, "TEMPLE");
+        console.log("Supply in billions:", temple.totalSupply() / 10**27, "billion TEMPLE");
         
         console.log("\n=== DEPLOYMENT COMPLETE ===");
     }

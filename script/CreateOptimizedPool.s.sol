@@ -20,20 +20,28 @@ contract CreateOptimizedPoolScript is Script, Constants {
     // Pool configuration
     uint24 lpFee = 3000; // 0.30%
     int24 tickSpacing = 60;
-    uint160 startingPrice = 79228162514264337593543950336; // sqrt(1) * 2^96 = 1:1 price
+    
+    // TARGET: 10 ETH market cap with 10B Temple supply
+    // Price: 1 ETH = 1B Temple tokens
+    // Calculate tick for this price ratio
+    int24 targetTick = -138155; // Approximately 1 ETH = 1B Temple tokens
+    uint160 startingPrice = TickMath.getSqrtPriceAtTick(targetTick);
 
-    // LOPSIDED LIQUIDITY: 0.01 ETH + 100,000 Temple tokens
+    // OPTIMIZED LIQUIDITY: 0.1 ETH + 10 billion Temple tokens
     uint256 ethAmount = 0.01 ether;
-    uint256 templeAmount = 100_000 * 10**18; // 100K Temple tokens
+    uint256 templeAmount = 10_000_000_000 * 10**18; // 10B Temple tokens
 
     // Full range liquidity
     int24 tickLower = TickMath.minUsableTick(tickSpacing);
     int24 tickUpper = TickMath.maxUsableTick(tickSpacing);
 
     function run() external {
-        console.log("=== CREATING LOPSIDED ETH/TEMPLE POOL ===");
+        console.log("=== CREATING OPTIMIZED ETH/TEMPLE POOL ===");
+        console.log("Target market cap: 10 ETH");
+        console.log("Target price: 1 ETH = 1B Temple tokens");
         console.log("ETH amount:", ethAmount);
         console.log("Temple amount:", templeAmount / 10**18, "tokens");
+        console.log("Temple amount (billions):", templeAmount / 10**27, "billion tokens");
 
         // Get deployed addresses from previous scripts
         // You'll need to update these addresses after running the deployment scripts
@@ -99,7 +107,7 @@ contract CreateOptimizedPoolScript is Script, Constants {
             salt: 0
         });
 
-        console.log("Adding lopsided liquidity...");
+        console.log("Adding optimized liquidity...");
         console.log("  Liquidity delta:", uint256(liqParams.liquidityDelta));
 
         // Add liquidity with ETH value (if ETH is one of the currencies)
@@ -108,10 +116,10 @@ contract CreateOptimizedPoolScript is Script, Constants {
 
         vm.stopBroadcast();
 
-        console.log("\n=== LOPSIDED POOL CREATION COMPLETE ===");
+        console.log("\n=== OPTIMIZED POOL CREATION COMPLETE ===");
         console.log("Pool created with OptimizedTempleHook");
-        console.log("Lopsided liquidity: 0.01 ETH + 100K Temple tokens");
-        console.log("Price will appreciate quickly due to imbalance!");
+        console.log("Optimized liquidity: 0.1 ETH + 10B Temple tokens");
+        console.log("Starting price: 1 ETH = 1B Temple tokens (10 ETH market cap)");
         
         // Display important addresses
         console.log("\n=== IMPORTANT ADDRESSES ===");
