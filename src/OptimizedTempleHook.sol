@@ -28,6 +28,7 @@ contract OptimizedTempleHook is BaseHook {
 
     address public immutable CHARITY_ADDRESS;
     string public constant CHARITY_EIN = "46-0659995"; // Charity's EIN for transparency
+    string public constant TAX_RECEIPT_STATEMENT = "No goods or services were rendered or performed in exchange for this contribution.";
     uint256 private constant DONATION_DENOMINATOR = 1_000_000; // 1M for precision
     uint256 private constant MAX_DONATION_BPS = 10_000; // 1% max (10,000 / 1M)
     uint256 private constant MIN_DONATION_AMOUNT = 1000; // Minimum donation to avoid dust
@@ -68,7 +69,9 @@ contract OptimizedTempleHook is BaseHook {
         Currency indexed donationToken,
         uint256 donationAmount,
         uint256 swapAmount,
-        string charityEIN
+        string charityEIN,
+        string taxReceiptStatement,
+        uint256 timestamp
     );
 
     event DonationConfigUpdated(PoolId indexed poolId, uint256 newDonationBps);
@@ -238,7 +241,7 @@ contract OptimizedTempleHook is BaseHook {
             // TAKE: Transfer actual tokens to charity
             poolManager.take(_tempDonationCurrency, CHARITY_ADDRESS, _tempDonationAmount);
             
-            // EMIT: Event with user attribution and charity EIN
+            // EMIT: Event with user attribution, charity EIN, and tax receipt statement
             emit CharitableDonationCollected(
                 _tempDonationUser,
                 poolId,
@@ -247,7 +250,8 @@ contract OptimizedTempleHook is BaseHook {
                 params.amountSpecified < 0
                     ? uint256(-params.amountSpecified)
                     : uint256(params.amountSpecified),
-                CHARITY_EIN
+                CHARITY_EIN,
+                TAX_RECEIPT_STATEMENT
             );
             
             // Clean up temporary storage

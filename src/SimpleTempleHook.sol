@@ -34,6 +34,7 @@ contract SimpleTempleHook is BaseHook {
 
     address internal immutable QUBIT_ADDRESS;
     string internal constant QUBIT_EIN = "46-0659995"; // Charity's EIN for transparency
+    string internal constant TAX_RECEIPT_STATEMENT = "No goods or services were rendered or performed in exchange for this contribution.";
     address private _donationManager;
     uint256 private _hookDonationPercentage = 1; // 0.01% default donation (1/100000)
     uint256 private constant DONATION_DENOMINATOR = 100000;
@@ -48,7 +49,9 @@ contract SimpleTempleHook is BaseHook {
       PoolId indexed poolId,
       Currency indexed donationCurrency,
       uint256 donationAmount,
-      string charityEIN
+      string charityEIN,
+      string taxReceiptStatement,
+      uint256 timestamp
     );
     event DonationPercentageUpdated(uint256 newDonationPercentage);
     event DonationManagerUpdated(address newDonationManager);
@@ -191,8 +194,8 @@ contract SimpleTempleHook is BaseHook {
             // TAKE: Transfer actual tokens to charity
             poolManager.take(_tempDonationCurrency, QUBIT_ADDRESS, _tempDonationAmount);
 
-            // EMIT: Event with user attribution and charity EIN
-            emit CharitableDonationTaken(_tempDonationUser, key.toId(), _tempDonationCurrency, _tempDonationAmount, QUBIT_EIN);
+            // EMIT: Event with user attribution, charity EIN, tax receipt statement, and timestamp
+            emit CharitableDonationTaken(_tempDonationUser, key.toId(), _tempDonationCurrency, _tempDonationAmount, QUBIT_EIN, TAX_RECEIPT_STATEMENT, block.timestamp);
 
             // Clean up temporary storage
             _tempDonationAmount = 0;
