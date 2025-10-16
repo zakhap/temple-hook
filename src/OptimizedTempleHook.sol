@@ -25,8 +25,9 @@ contract OptimizedTempleHook is BaseHook {
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
     //////////////////////////////////////////////////////////////*/
-    
+
     address public immutable CHARITY_ADDRESS;
+    string public constant CHARITY_EIN = "46-0659995"; // Charity's EIN for transparency
     uint256 private constant DONATION_DENOMINATOR = 1_000_000; // 1M for precision
     uint256 private constant MAX_DONATION_BPS = 10_000; // 1% max (10,000 / 1M)
     uint256 private constant MIN_DONATION_AMOUNT = 1000; // Minimum donation to avoid dust
@@ -60,15 +61,16 @@ contract OptimizedTempleHook is BaseHook {
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
-    
+
     event CharitableDonationCollected(
         address indexed user,
         PoolId indexed poolId,
         Currency indexed donationToken,
         uint256 donationAmount,
-        uint256 swapAmount
+        uint256 swapAmount,
+        string charityEIN
     );
-    
+
     event DonationConfigUpdated(PoolId indexed poolId, uint256 newDonationBps);
     event DonationManagerUpdateInitiated(address newManager, uint256 effectiveTime);
     event DonationManagerUpdated(address oldManager, address newManager);
@@ -236,15 +238,16 @@ contract OptimizedTempleHook is BaseHook {
             // TAKE: Transfer actual tokens to charity
             poolManager.take(_tempDonationCurrency, CHARITY_ADDRESS, _tempDonationAmount);
             
-            // EMIT: Event with user attribution
+            // EMIT: Event with user attribution and charity EIN
             emit CharitableDonationCollected(
                 _tempDonationUser,
                 poolId,
                 _tempDonationCurrency,
                 _tempDonationAmount,
-                params.amountSpecified < 0 
+                params.amountSpecified < 0
                     ? uint256(-params.amountSpecified)
-                    : uint256(params.amountSpecified)
+                    : uint256(params.amountSpecified),
+                CHARITY_EIN
             );
             
             // Clean up temporary storage
@@ -327,7 +330,11 @@ contract OptimizedTempleHook is BaseHook {
     function getDonationDenominator() external pure returns (uint256) {
         return DONATION_DENOMINATOR;
     }
-    
+
+    function getCharityEIN() external pure returns (string memory) {
+        return CHARITY_EIN;
+    }
+
     function getHookData(address user) external pure returns (bytes memory) {
         return abi.encode(user);
     }

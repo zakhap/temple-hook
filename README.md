@@ -1,100 +1,393 @@
-# v4-template
-### **A template for writing Uniswap v4 Hooks 🦄**
+# Temple Hook 🏛️
 
-[`Use this Template`](https://github.com/uniswapfoundation/v4-template/generate)
+**Charitable donation hooks for Uniswap v4 on Base L2**
 
-1. The example hook [Counter.sol](src/Counter.sol) demonstrates the `beforeSwap()` and `afterSwap()` hooks
-2. The test template [Counter.t.sol](test/Counter.t.sol) preconfigures the v4 pool manager, test tokens, and test liquidity.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.26-blue)](https://soliditylang.org/)
+[![Foundry](https://img.shields.io/badge/Built%20with-Foundry-red)](https://getfoundry.sh/)
 
-<details>
-<summary>Updating to v4-template:latest</summary>
-
-This template is actively maintained -- you can update the v4 dependencies, scripts, and helpers: 
-```bash
-git remote add template https://github.com/uniswapfoundation/v4-template
-git fetch template
-git merge template/main <BRANCH> --allow-unrelated-histories
-```
-
-</details>
+Temple Hook enables automatic charitable donations on every swap transaction in Uniswap v4 pools, directing a small percentage of swap volume to verified 501(c)(3) charities on Base L2.
 
 ---
 
-### Check Forge Installation
-*Ensure that you have correctly installed Foundry (Forge) Stable. You can update Foundry by running:*
+## 🌟 Features
+
+- **Automatic Donations**: Seamlessly collect 0.01%-3% from swap transactions
+- **Transparent Tracking**: Every donation emits an event with charity EIN
+- **Zero Capital Required**: One-sided bonding curve liquidity
+- **Base L2 Optimized**: ~95% cheaper gas than Ethereum mainnet
+- **Governance Controls**: Configurable donation rates and emergency pause
+- **Battle-Tested**: Comprehensive security and edge case testing
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Contracts](#contracts)
+- [Quick Start](#quick-start)
+- [Deployment](#deployment)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Security](#security)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## 🎯 Overview
+
+Temple Hook implements Uniswap v4's hook system to create pools that automatically donate a portion of swap volume to charity. Built for Base L2, it enables cost-effective charitable giving integrated directly into DeFi trading.
+
+### Key Benefits
+
+1. **For Traders**: Support verified charities with every swap
+2. **For Projects**: Launch tokens with built-in charitable giving
+3. **For Charities**: Receive transparent, on-chain donations with EIN tracking
+4. **For Base**: Showcase L2 efficiency for social good
+
+### Supported Charity
+
+- **QUBIT** (EIN: 46-0659995)
+- Verified 501(c)(3) organization
+- On-chain verification via emitted EIN in every donation event
+
+---
+
+## 🏗️ Architecture
+
+### Hook System
+
+Temple Hook uses Uniswap v4's `beforeSwap` and `afterSwap` hooks to:
+
+1. **Calculate donation** based on swap amount and configured rate
+2. **Credit hook** using PoolManager's mint/burn/take accounting
+3. **Transfer to charity** via `poolManager.take()`
+4. **Emit event** with user, amount, and charity EIN
+
+### Delta Accounting
+
+Properly implements Uniswap v4's delta system:
+- `beforeSwap`: Returns `BeforeSwapDelta` indicating donation amount
+- Pool Manager charges user for donation automatically
+- `afterSwap`: Transfers collected donation to charity
+
+### Bonding Curve
+
+Clanker-inspired multi-position bonding curve:
+- **One-sided liquidity**: Zero upfront capital (only Temple tokens)
+- **5 concentrated positions**: Progressive price discovery
+- **$0.000027 → $0.061**: Starting to ending price range
+- **10B token supply**: Distributed across positions
+
+---
+
+## 📦 Contracts
+
+### Core Contracts
+
+| Contract | Purpose | Features |
+|----------|---------|----------|
+| **SimpleTempleHook** | Main charitable hook | • 0.01-3% donation rate<br>• Configurable by manager<br>• Clean implementation |
+| **OptimizedTempleHook** | Advanced hook | • Per-pool configuration<br>• Governance timelock<br>• Emergency pause<br>• Gas optimized |
+| **TempleToken** | ERC20 token | • Standard implementation<br>• 10B supply<br>• 18 decimals |
+
+### Contract Addresses (Base Mainnet)
 
 ```
-foundryup
+Coming soon - not yet deployed
 ```
 
-> *v4-template* appears to be _incompatible_ with Foundry Nightly. See [foundry announcements](https://book.getfoundry.sh/announcements) to revert back to the stable build
+---
 
+## 🚀 Quick Start
 
+### Prerequisites
 
-## Set up
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- [Git](https://git-scm.com/downloads)
 
-*requires [foundry](https://book.getfoundry.sh)*
+### Installation
 
-```
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/temple-hook.git
+cd temple-hook
+
+# Install dependencies
 forge install
+
+# Build contracts
+forge build
+
+# Run tests
 forge test
 ```
 
-### Local Development (Anvil)
-
-Other than writing unit tests (recommended!), you can only deploy & test hooks on [anvil](https://book.getfoundry.sh/anvil/)
+### Local Testing
 
 ```bash
-# start anvil, a local EVM chain
-anvil --disable-code-size-limit 
+# Start local Base fork
+anvil --fork-url https://mainnet.base.org
 
-# in a new terminal
-forge script script/Anvil.s.sol \
+# In another terminal, deploy locally
+forge script script/DeployTempleToken.s.sol \
     --rpc-url http://localhost:8545 \
-    --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+    --broadcast \
+    --private-key <YOUR_PRIVATE_KEY>
+```
+
+---
+
+## 🛠️ Deployment
+
+### Environment Setup
+
+Create a `.env` file:
+
+```bash
+# Base RPC
+BASE_RPC_URL=https://mainnet.base.org
+
+# Deployment wallet
+PRIVATE_KEY=your_private_key_here
+
+# Contract addresses (after deployment)
+TEMPLE_TOKEN_ADDRESS=
+OPTIMIZED_HOOK_ADDRESS=
+```
+
+### Deployment Scripts
+
+```bash
+# 1. Deploy Temple Token
+forge script script/DeployTempleToken.s.sol \
+    --rpc-url $BASE_RPC_URL \
+    --broadcast \
+    --verify
+
+# 2. Deploy Optimized Hook
+TEMPLE_TOKEN_ADDRESS=<from_step_1> \
+forge script script/DeployOptimizedHook.s.sol \
+    --rpc-url $BASE_RPC_URL \
+    --broadcast \
+    --verify
+
+# 3. Create Bonding Curve Pool
+TEMPLE_TOKEN_ADDRESS=<from_step_1> \
+OPTIMIZED_HOOK_ADDRESS=<from_step_2> \
+forge script script/CreateBondingCurvePool.s.sol \
+    --rpc-url $BASE_RPC_URL \
     --broadcast
 ```
 
-See [script/](script/) for hook deployment, pool creation, liquidity provision, and swapping.
+### Cost Estimate
+
+Deployment on Base mainnet costs approximately **$50-$100 USD**:
+- Temple Token: ~$20
+- Optimized Hook: ~$30
+- Bonding Curve Pool: ~$40
+
+See [DEPLOYMENT_COSTS.md](DEPLOYMENT_COSTS.md) for detailed breakdown.
 
 ---
 
-<details>
-<summary><h2>Troubleshooting</h2></summary>
+## 🧪 Testing
 
+### Run All Tests
 
+```bash
+forge test
+```
 
-### *Permission Denied*
+### Test Suites
 
-When installing dependencies with `forge install`, Github may throw a `Permission Denied` error
+| Suite | Command | Purpose |
+|-------|---------|---------|
+| **Unit Tests** | `forge test --match-contract OptimizedTempleHookFixed` | Core functionality |
+| **Integration** | `forge test --match-path "test/temple-hook/integration/*"` | End-to-end flows |
+| **Security** | `forge test --match-path "test/temple-hook/security/*"` | Attack resistance |
+| **Governance** | `forge test --match-path "test/temple-hook/governance/*"` | Admin functions |
+| **Edge Cases** | `forge test --match-path "test/temple-hook/edge-cases/*"` | Boundary conditions |
 
-Typically caused by missing Github SSH keys, and can be resolved by following the steps [here](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh) 
+### Test Coverage
 
-Or [adding the keys to your ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent), if you have already uploaded SSH keys
+```bash
+forge coverage
+```
 
-### Hook deployment failures
+### Gas Profiling
 
-Hook deployment failures are caused by incorrect flags or incorrect salt mining
-
-1. Verify the flags are in agreement:
-    * `getHookCalls()` returns the correct flags
-    * `flags` provided to `HookMiner.find(...)`
-2. Verify salt mining is correct:
-    * In **forge test**: the *deployer* for: `new Hook{salt: salt}(...)` and `HookMiner.find(deployer, ...)` are the same. This will be `address(this)`. If using `vm.prank`, the deployer will be the pranking address
-    * In **forge script**: the deployer must be the CREATE2 Proxy: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
-        * If anvil does not have the CREATE2 deployer, your foundry may be out of date. You can update it with `foundryup`
-
-</details>
+```bash
+forge test --gas-report
+```
 
 ---
 
-Additional resources:
+## 📚 Documentation
 
-[Uniswap v4 docs](https://docs.uniswap.org/contracts/v4/overview)
+### Core Documents
 
-[v4-periphery](https://github.com/uniswap/v4-periphery) contains advanced hook implementations that serve as a great reference
+- **[BONDING_CURVE_ANALYSIS.md](BONDING_CURVE_ANALYSIS.md)** - Detailed bonding curve economics
+- **[DEPLOYMENT_COSTS.md](DEPLOYMENT_COSTS.md)** - Gas costs and estimates
+- **[CLAUDE.md](CLAUDE.md)** - Project instructions for AI assistants
+- **[CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md)** - Repository cleanup history
 
-[v4-core](https://github.com/uniswap/v4-core)
+### Key Concepts
 
-[v4-by-example](https://v4-by-example.org)
+#### Donation Mechanism
 
+```solidity
+// User swaps 100 USDC for Temple
+// Hook calculates: 100 * 0.0001 (0.01%) = 0.01 USDC donation
+// User pays: 100 USDC + fees
+// Charity receives: 0.01 USDC
+// User receives: Temple tokens (minus 0.01 USDC worth)
+```
+
+#### Event Tracking
+
+Every donation emits:
+```solidity
+event CharitableDonationTaken(
+    address indexed user,
+    PoolId indexed poolId,
+    Currency indexed donationCurrency,
+    uint256 donationAmount,
+    string charityEIN  // "46-0659995"
+);
+```
+
+#### Bonding Curve Economics
+
+Starting with 10B Temple tokens distributed across 5 positions:
+
+| Position | Tokens | USDC Required | Price Range |
+|----------|--------|---------------|-------------|
+| 1 | 1B (10%) | ~$224 | $0.000027 → $0.00051 |
+| 2 | 5B (50%) | ~$48,600 | $0.00051 → $0.0185 |
+| 3 | 1.5B (15%) | ~$26,566 | $0.00168 → $0.0185 |
+| 4 | 2B (20%) | ~$2.1M | $0.0185 → $0.061 |
+| 5 | 500M (5%) | ~$1.1M | $0.0075 → $0.061 |
+
+Total: ~$3.3M USDC to exhaust all positions
+
+---
+
+## 🔒 Security
+
+### Audits
+
+⚠️ **Not yet audited** - Use at your own risk in production
+
+### Security Features
+
+- ✅ Reentrancy protection
+- ✅ Access control on admin functions
+- ✅ Governance timelock (1 day)
+- ✅ Emergency pause mechanism
+- ✅ Rate limiting on config changes
+- ✅ Donation caps (max 1-3%)
+- ✅ Input validation
+- ✅ Comprehensive test coverage
+
+### Known Limitations
+
+1. **Charity Address**: Immutable after deployment
+2. **Pool Specific**: Hook applies to all pools using it
+3. **Base Only**: Designed for Base L2 (can adapt for other chains)
+
+### Reporting Issues
+
+Found a security vulnerability? Please email: [your-security-email]
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our contributing guidelines:
+
+### Development Setup
+
+```bash
+# Fork the repository
+git clone https://github.com/yourusername/temple-hook.git
+cd temple-hook
+
+# Create a branch
+git checkout -b feature/your-feature
+
+# Make changes and test
+forge test
+
+# Commit and push
+git add .
+git commit -m "feat: your feature description"
+git push origin feature/your-feature
+```
+
+### Pull Request Process
+
+1. Ensure all tests pass (`forge test`)
+2. Update documentation as needed
+3. Add tests for new features
+4. Follow existing code style
+5. Reference any related issues
+
+### Code Style
+
+- Use Solidity 0.8.26
+- Follow [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html)
+- Add NatSpec comments for public functions
+- Write comprehensive tests
+
+---
+
+## 📖 Resources
+
+### Uniswap v4
+
+- [Uniswap v4 Docs](https://docs.uniswap.org/contracts/v4/overview)
+- [v4-core](https://github.com/Uniswap/v4-core)
+- [v4-periphery](https://github.com/Uniswap/v4-periphery)
+- [v4-by-example](https://v4-by-example.org)
+
+### Base L2
+
+- [Base Docs](https://docs.base.org)
+- [Base Block Explorer](https://basescan.org)
+- [Base Bridge](https://bridge.base.org)
+
+### Related Projects
+
+- [Clanker SDK](https://github.com/mykcryptodev/clanker-sdk) - Bonding curve inspiration
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **Uniswap Foundation** - v4 hooks system
+- **Base Team** - L2 infrastructure
+- **QUBIT** - Charitable partnership
+- **Clanker** - Bonding curve design inspiration
+
+---
+
+## 📞 Contact
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/yourusername/temple-hook/issues)
+- **Twitter**: [@yourhandle]
+- **Discord**: [Your Discord server]
+
+---
+
+**Built with ❤️ for charitable giving in DeFi**
+
+*Temple Hook - Making every swap count for charity*

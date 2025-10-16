@@ -31,12 +31,13 @@ import {TempleToken} from "./TempleToken.sol";
  */
 contract SimpleTempleHook is BaseHook {
     using CurrencyLibrary for Currency;
-    
+
     address internal immutable QUBIT_ADDRESS;
+    string internal constant QUBIT_EIN = "46-0659995"; // Charity's EIN for transparency
     address private _donationManager;
     uint256 private _hookDonationPercentage = 1; // 0.01% default donation (1/100000)
     uint256 private constant DONATION_DENOMINATOR = 100000;
-    
+
     // Temporary storage for donation info between hooks
     uint256 private _tempDonationAmount;
     Currency private _tempDonationCurrency;
@@ -46,7 +47,8 @@ contract SimpleTempleHook is BaseHook {
       address indexed user,
       PoolId indexed poolId,
       Currency indexed donationCurrency,
-      uint256 donationAmount
+      uint256 donationAmount,
+      string charityEIN
     );
     event DonationPercentageUpdated(uint256 newDonationPercentage);
     event DonationManagerUpdated(address newDonationManager);
@@ -80,6 +82,9 @@ contract SimpleTempleHook is BaseHook {
         return QUBIT_ADDRESS;
     }
 
+    function qubitEIN() external pure returns (string memory) {
+        return QUBIT_EIN;
+    }
 
     function getDonationManager() external view returns (address) {
         return _donationManager;
@@ -185,10 +190,10 @@ contract SimpleTempleHook is BaseHook {
             
             // TAKE: Transfer actual tokens to charity
             poolManager.take(_tempDonationCurrency, QUBIT_ADDRESS, _tempDonationAmount);
-            
-            // EMIT: Event with user attribution
-            emit CharitableDonationTaken(_tempDonationUser, key.toId(), _tempDonationCurrency, _tempDonationAmount);
-            
+
+            // EMIT: Event with user attribution and charity EIN
+            emit CharitableDonationTaken(_tempDonationUser, key.toId(), _tempDonationCurrency, _tempDonationAmount, QUBIT_EIN);
+
             // Clean up temporary storage
             _tempDonationAmount = 0;
             _tempDonationCurrency = Currency.wrap(address(0));
