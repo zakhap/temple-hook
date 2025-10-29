@@ -241,7 +241,7 @@ contract OptimizedTempleHook is BaseHook {
             // TAKE: Transfer actual tokens to charity
             poolManager.take(_tempDonationCurrency, CHARITY_ADDRESS, _tempDonationAmount);
             
-            // EMIT: Event with user attribution, charity EIN, and tax receipt statement
+            // EMIT: Event with user attribution, charity EIN, tax receipt statement, and timestamp
             emit CharitableDonationCollected(
                 _tempDonationUser,
                 poolId,
@@ -251,7 +251,8 @@ contract OptimizedTempleHook is BaseHook {
                     ? uint256(-params.amountSpecified)
                     : uint256(params.amountSpecified),
                 CHARITY_EIN,
-                TAX_RECEIPT_STATEMENT
+                TAX_RECEIPT_STATEMENT,
+                block.timestamp
             );
             
             // Clean up temporary storage

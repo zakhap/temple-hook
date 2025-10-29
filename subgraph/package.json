@@ -1,0 +1,14 @@
+{
+  "name": "temple-hook-subgraph",
+  "version": "1.0.0",
+  "description": "Goldsky subgraph for SimpleTempleHook contract",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy": "goldsky subgraph deploy temple-hook/v1.0.0 --path ."
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "^0.71.0",
+    "@graphprotocol/graph-ts": "^0.31.0"
+  }
+}

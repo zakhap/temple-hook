@@ -1,0 +1,12 @@
+type CharitableDonation @entity {
+  id: ID!
+  user: Bytes!
+  poolId: Bytes!
+  donationAmount: BigInt!
+  donationCurrency: Bytes!
+  charityEIN: String!
+  taxReceiptStatement: String!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}

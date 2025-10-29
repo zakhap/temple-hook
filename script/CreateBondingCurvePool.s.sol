@@ -16,8 +16,8 @@ import {Actions} from "v4-periphery/src/libraries/Actions.sol";
 
 import {Constants} from "./base/Constants.sol";
 
-/// @notice Creates one-sided bonding curve ETH/Temple pool with OptimizedTempleHook
-/// @dev Uses Clanker's "Project" multi-position strategy for progressive price discovery
+/// @notice Creates one-sided bonding curve Temple/USDC pool with SimpleTempleHook
+/// @dev Exponential decay distribution (40/20/12/8/20) reaching $1 in final position
 contract CreateBondingCurvePoolScript is Script, Constants {
     using CurrencyLibrary for Currency;
 
@@ -25,12 +25,12 @@ contract CreateBondingCurvePoolScript is Script, Constants {
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
     // Pool configuration
-    uint24 lpFee = 3000; // 0.30%
-    int24 tickSpacing = 200; // Match Clanker's tick spacing
+    uint24 lpFee = 0; // 0% LP fees (hook takes 5% donation)
+    int24 tickSpacing = 200; // Uniswap v4 tick spacing
 
-    // Starting tick: -230400 (standard Clanker starting point)
-    // At this tick: 1 Temple = ~$0.000027 USDC (very cheap!)
-    int24 startingTick = -230400;
+    // Starting tick: -92200
+    // At this tick: 1 Temple = $0.0001 USDC
+    int24 startingTick = -92200;
     uint160 startingPrice = TickMath.getSqrtPriceAtTick(startingTick);
 
     // Total Temple tokens to distribute across all positions
@@ -38,22 +38,25 @@ contract CreateBondingCurvePoolScript is Script, Constants {
 
     function run() external {
         console.log("=== CREATING BONDING CURVE TEMPLE/USDC POOL ===");
-        console.log("Strategy: Clanker 'Project' Multi-Position Bonding Curve");
+        console.log("Strategy: Exponential Decay with Infinity Pool (40/20/12/8/20)");
         console.log("Total Temple Supply:", totalTempleAmount / 10**18, "tokens");
+        console.log("Price Range: $0.0001 -> $1.00 (10,000x appreciation)");
 
         // Get deployed addresses from environment variables
-        address templeToken = vm.envAddress("TEMPLE_TOKEN_ADDRESS");
-        address optimizedHook = vm.envAddress("OPTIMIZED_HOOK_ADDRESS");
+        address templeToken = vm.envAddress("MOCK_TEMPLE6_ADDRESS");
+        address usdcToken = vm.envAddress("MOCK_USDC6_ADDRESS");
+        address hookAddress = vm.envAddress("SIMPLE_HOOK_V2_ADDRESS");
 
         console.log("\n=== CONTRACT ADDRESSES ===");
         console.log("Temple Token:", templeToken);
-        console.log("OptimizedHook:", optimizedHook);
+        console.log("USDC Token:", usdcToken);
+        console.log("SimpleTempleHook:", hookAddress);
         console.log("PoolManager:", address(POOLMANAGER));
         console.log("PositionManager:", address(posm));
 
         // Setup currencies - Temple as currency0 for one-sided bonding curve
         Currency currency0 = Currency.wrap(templeToken); // Temple
-        Currency currency1 = Currency.wrap(USDC); // USDC
+        Currency currency1 = Currency.wrap(usdcToken); // USDC or Mock USDC
 
         // Create pool key
         PoolKey memory poolKey = PoolKey({
@@ -61,7 +64,7 @@ contract CreateBondingCurvePoolScript is Script, Constants {
             currency1: currency1,
             fee: lpFee,
             tickSpacing: tickSpacing,
-            hooks: IHooks(optimizedHook)
+            hooks: IHooks(hookAddress)
         });
 
         console.log("\n=== POOL KEY ===");
@@ -89,70 +92,75 @@ contract CreateBondingCurvePoolScript is Script, Constants {
         bytes memory actions = "";
         bytes[] memory params = new bytes[](6); // 5 positions + 1 SETTLE_PAIR
 
-        // Position 1: 10% of supply, $27K-$130K market cap range
-        console.log("\n=== Position 1: 10% (1B tokens) ===");
-        uint256 amount1 = (totalTempleAmount * 1000) / 10000; // 1B tokens
+        // Position 1: 40% of supply, $0.0001 -> $0.000223 (early adopters, whale-resistant)
+        console.log("\n=== Position 1: 40% (4B tokens) - Early Adopters ===");
+        uint256 amount1 = (totalTempleAmount * 4000) / 10000; // 4B tokens (40%)
         uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmounts(
             startingPrice,
-            TickMath.getSqrtPriceAtTick(-230400),
-            TickMath.getSqrtPriceAtTick(-214000),
+            TickMath.getSqrtPriceAtTick(-92200),
+            TickMath.getSqrtPriceAtTick(-84200),
             amount1,  // Temple is currency0
             0         // USDC is currency1
         );
         actions = abi.encodePacked(actions, uint8(Actions.MINT_POSITION));
-        params[0] = abi.encode(poolKey, -230400, -214000, liquidity1, amount1, 0, msg.sender, abi.encode(""));
+        params[0] = abi.encode(poolKey, -92200, -84200, liquidity1, amount1, 0, msg.sender, abi.encode(""));
+        console.log("Price: $0.0001 -> $0.000223 | Market Cap: $1M -> $2.2M");
 
-        // Position 2: 50% of supply, $130K-$50M market cap range
-        console.log("=== Position 2: 50% (5B tokens) ===");
-        uint256 amount2 = (totalTempleAmount * 5000) / 10000; // 5B tokens
+        // Position 2: 20% of supply, $0.000223 -> $0.000497 (early growth)
+        console.log("=== Position 2: 20% (2B tokens) - Early Growth ===");
+        uint256 amount2 = (totalTempleAmount * 2000) / 10000; // 2B tokens (20%)
         uint128 liquidity2 = LiquidityAmounts.getLiquidityForAmounts(
             startingPrice,
-            TickMath.getSqrtPriceAtTick(-214000),
-            TickMath.getSqrtPriceAtTick(-155000),
+            TickMath.getSqrtPriceAtTick(-84200),
+            TickMath.getSqrtPriceAtTick(-76200),
             amount2,  // Temple is currency0
             0         // USDC is currency1
         );
         actions = abi.encodePacked(actions, uint8(Actions.MINT_POSITION));
-        params[1] = abi.encode(poolKey, -214000, -155000, liquidity2, amount2, 0, msg.sender, abi.encode(""));
+        params[1] = abi.encode(poolKey, -84200, -76200, liquidity2, amount2, 0, msg.sender, abi.encode(""));
+        console.log("Price: $0.000223 -> $0.000497 | Market Cap: $2.2M -> $5M");
 
-        // Position 3: 15% of supply, $450K-$50M market cap range
-        console.log("=== Position 3: 15% (1.5B tokens) ===");
-        uint256 amount3 = (totalTempleAmount * 1500) / 10000; // 1.5B tokens
+        // Position 3: 12% of supply, $0.000497 -> $0.001107 (FOMO begins)
+        console.log("=== Position 3: 12% (1.2B tokens) - FOMO Phase ===");
+        uint256 amount3 = (totalTempleAmount * 1200) / 10000; // 1.2B tokens (12%)
         uint128 liquidity3 = LiquidityAmounts.getLiquidityForAmounts(
             startingPrice,
-            TickMath.getSqrtPriceAtTick(-202000),
-            TickMath.getSqrtPriceAtTick(-155000),
+            TickMath.getSqrtPriceAtTick(-76200),
+            TickMath.getSqrtPriceAtTick(-68200),
             amount3,  // Temple is currency0
             0         // USDC is currency1
         );
         actions = abi.encodePacked(actions, uint8(Actions.MINT_POSITION));
-        params[2] = abi.encode(poolKey, -202000, -155000, liquidity3, amount3, 0, msg.sender, abi.encode(""));
+        params[2] = abi.encode(poolKey, -76200, -68200, liquidity3, amount3, 0, msg.sender, abi.encode(""));
+        console.log("Price: $0.000497 -> $0.001107 | Market Cap: $5M -> $11M");
 
-        // Position 4: 20% of supply, $50M-$1.5B market cap range
-        console.log("=== Position 4: 20% (2B tokens) ===");
-        uint256 amount4 = (totalTempleAmount * 2000) / 10000; // 2B tokens
+        // Position 4: 8% of supply, $0.001107 -> $0.002467 (scarcity hits)
+        console.log("=== Position 4: 8% (0.8B tokens) - Scarcity ===");
+        uint256 amount4 = (totalTempleAmount * 800) / 10000; // 0.8B tokens (8%)
         uint128 liquidity4 = LiquidityAmounts.getLiquidityForAmounts(
             startingPrice,
-            TickMath.getSqrtPriceAtTick(-155000),
-            TickMath.getSqrtPriceAtTick(-120000),
+            TickMath.getSqrtPriceAtTick(-68200),
+            TickMath.getSqrtPriceAtTick(-60200),
             amount4,  // Temple is currency0
             0         // USDC is currency1
         );
         actions = abi.encodePacked(actions, uint8(Actions.MINT_POSITION));
-        params[3] = abi.encode(poolKey, -155000, -120000, liquidity4, amount4, 0, msg.sender, abi.encode(""));
+        params[3] = abi.encode(poolKey, -68200, -60200, liquidity4, amount4, 0, msg.sender, abi.encode(""));
+        console.log("Price: $0.001107 -> $0.002467 | Market Cap: $11M -> $25M");
 
-        // Position 5: 5% of supply, $200M-$1.5B market cap range
-        console.log("=== Position 5: 5% (500M tokens) ===");
-        uint256 amount5 = (totalTempleAmount * 500) / 10000; // 500M tokens
+        // Position 5: 20% of supply, $0.002467 -> $1.00 (THE INFINITY POOL!)
+        console.log("=== Position 5: 20% (2B tokens) - INFINITY POOL ===");
+        uint256 amount5 = (totalTempleAmount * 2000) / 10000; // 2B tokens (20%)
         uint128 liquidity5 = LiquidityAmounts.getLiquidityForAmounts(
             startingPrice,
-            TickMath.getSqrtPriceAtTick(-141000),
-            TickMath.getSqrtPriceAtTick(-120000),
+            TickMath.getSqrtPriceAtTick(-60200),
+            TickMath.getSqrtPriceAtTick(0),
             amount5,  // Temple is currency0
             0         // USDC is currency1
         );
         actions = abi.encodePacked(actions, uint8(Actions.MINT_POSITION));
-        params[4] = abi.encode(poolKey, -141000, -120000, liquidity5, amount5, 0, msg.sender, abi.encode(""));
+        params[4] = abi.encode(poolKey, -60200, 0, liquidity5, amount5, 0, msg.sender, abi.encode(""));
+        console.log("Price: $0.002467 -> $1.00 (405x!) | Market Cap: $25M -> $10B");
 
         // Add SETTLE_PAIR action to finalize token transfers
         actions = abi.encodePacked(actions, uint8(Actions.SETTLE_PAIR));
@@ -174,9 +182,14 @@ contract CreateBondingCurvePoolScript is Script, Constants {
 
         console.log("\n=== DEPLOYMENT COMPLETE ===");
         console.log("Pool Type: ONE-SIDED BONDING CURVE (Temple/USDC)");
-        console.log("Liquidity: 10B Temple tokens (ZERO USDC)");
+        console.log("Liquidity: 100% of supply (10B Temple tokens, ZERO USDC)");
+        console.log("Distribution: Exponential Decay (40/20/12/8/20)");
         console.log("Positions: 5 concentrated ranges");
+        console.log("\n=== FUNDRAISING TARGETS ===");
+        console.log("Positions 1-4 (80% sold): ~$3.8M raised for charity");
+        console.log("Position 5 (infinity pool): Reaches $1/token if fully bought");
         console.log("\n=== READY FOR PRICE DISCOVERY ===");
-        console.log("Users buy Temple with USDC, price moves up through the curve!");
+        console.log("Users buy Temple with USDC, 5% of every swap goes to charity!");
+        console.log("Price appreciation: 10,000x ($0.0001 -> $1.00)");
     }
 }

@@ -15,34 +15,32 @@ import {TempleToken} from "./TempleToken.sol";
 /**
  * @title SimpleTempleHook
  * @notice A Uniswap v4 hook that collects charitable donations from swap transactions
- * @dev This hook implements a fee mechanism that takes a small percentage (default 0.01%)
- * from each swap transaction and sends it to a designated charity address (QUBIT_ADDRESS).
- * 
- * The hook uses Uniswap v4's delta accounting system properly:
- * 1. beforeSwap: Calculate donation amount and return BeforeSwapDelta indicating hook receives donation
- * 2. afterSwap: Transfer the collected donation to the charity address using poolManager.take()
- * 3. Event emission for full transparency of all donations
- * 
- * This approach ensures users only pay the intended donation amount (no double deduction)
- * while the charity receives the donations through proper Uniswap v4 accounting.
- * 
- * The donation percentage can be adjusted by the donation manager, up to a maximum of 1%.
- * The hook requires hookData to contain the end user's address for proper attribution.
+ * @dev This hook implements a fee mechanism that takes a small percentage (default 5%)
+ * from each swap transaction and sends it directly to a designated charity address.
+ *
+ * Implementation follows the official Uniswap v4 custom accounting pattern:
+ * 1. beforeSwap: Uses poolManager.take() to transfer donation directly to charity (creates debt for hook)
+ * 2. beforeSwap: Returns BeforeSwapDelta to transfer the hook's debt to swap router (user pays the donation)
+ * 3. afterSwap: Emits CharitableDonationTaken event for full transparency
+ *
+ * This pattern ensures:
+ * - Charity receives donations immediately in beforeSwap
+ * - User pays the donation amount (it's added to their swap cost)
+ * - No double accounting or settlement errors
+ * - Full event transparency with EIN and tax receipt statement
+ *
+ * The donation percentage can be adjusted by the donation manager, up to a maximum of 3%.
+ * The hookData can optionally contain the end user's address for proper event attribution.
  */
 contract SimpleTempleHook is BaseHook {
     using CurrencyLibrary for Currency;
 
-    address internal immutable QUBIT_ADDRESS;
+    address private _charityAddress;
     string internal constant QUBIT_EIN = "46-0659995"; // Charity's EIN for transparency
     string internal constant TAX_RECEIPT_STATEMENT = "No goods or services were rendered or performed in exchange for this contribution.";
     address private _donationManager;
-    uint256 private _hookDonationPercentage = 1; // 0.01% default donation (1/100000)
+    uint256 private _hookDonationPercentage = 5000; // 5% default donation (5000/100000)
     uint256 private constant DONATION_DENOMINATOR = 100000;
-
-    // Temporary storage for donation info between hooks
-    uint256 private _tempDonationAmount;
-    Currency private _tempDonationCurrency;
-    address private _tempDonationUser;
 
     event CharitableDonationTaken(
       address indexed user,
@@ -55,11 +53,14 @@ contract SimpleTempleHook is BaseHook {
     );
     event DonationPercentageUpdated(uint256 newDonationPercentage);
     event DonationManagerUpdated(address newDonationManager);
+    event CharityAddressUpdated(address indexed oldCharity, address indexed newCharity);
 
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {
-        QUBIT_ADDRESS = 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720; // SET THIS CORRECTLY, is set to anvil (9)
-        _donationManager = msg.sender; // Set deployer as initial donation manager
+    constructor(IPoolManager _poolManager, address initialCharity, address initialManager) BaseHook(_poolManager) {
+        require(initialCharity != address(0), "Zero charity address");
+        require(initialManager != address(0), "Zero manager address");
+        _charityAddress = initialCharity;
+        _donationManager = initialManager;
     }
 
     modifier onlyDonationManager() {
@@ -69,7 +70,7 @@ contract SimpleTempleHook is BaseHook {
 
     // Function to update donation percentage (restricted to donation manager)
     function setDonationPercentage(uint256 newDonationPercentage) external onlyDonationManager {
-        require(newDonationPercentage <= 3000, "Donation too high"); // Max 3% (3000/100000)
+        require(newDonationPercentage <= 30000, "Donation too high"); // Max 30% (30000/100000)
         _hookDonationPercentage = newDonationPercentage;
         emit DonationPercentageUpdated(newDonationPercentage);
     }
@@ -81,8 +82,16 @@ contract SimpleTempleHook is BaseHook {
         emit DonationManagerUpdated(newDonationManager);
     }
 
-    function qubitAddress() external view returns (address) {
-        return QUBIT_ADDRESS;
+    // Function to update charity address (restricted to donation manager)
+    function setCharityAddress(address newCharity) external onlyDonationManager {
+        require(newCharity != address(0), "Zero address");
+        address oldCharity = _charityAddress;
+        _charityAddress = newCharity;
+        emit CharityAddressUpdated(oldCharity, newCharity);
+    }
+
+    function charityAddress() external view returns (address) {
+        return _charityAddress;
     }
 
     function qubitEIN() external pure returns (string memory) {
@@ -125,60 +134,18 @@ contract SimpleTempleHook is BaseHook {
                 afterAddLiquidity: false,
                 beforeRemoveLiquidity: false,
                 afterRemoveLiquidity: false,
-                beforeSwap: true,
+                beforeSwap: false,
                 afterSwap: true,
                 beforeDonate: false,
                 afterDonate: false,
-                beforeSwapReturnDelta: true,
-                afterSwapReturnDelta: false,
+                beforeSwapReturnDelta: false,
+                afterSwapReturnDelta: true,
                 afterAddLiquidityReturnDelta: false,
                 afterRemoveLiquidityReturnDelta: false
             });
     }
 
-    // Collect donation using mint/burn/take pattern
-    function _beforeSwap(
-        address sender,
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        bytes calldata hookData
-    ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-        // Extract user address from hookData for event (optional)
-        address user = hookData.length >= 20 ? abi.decode(hookData, (address)) : sender;
-        
-        // Calculate donation based on swap amount
-        uint256 swapAmount = params.amountSpecified < 0 
-            ? uint256(-params.amountSpecified) 
-            : uint256(params.amountSpecified);
-        uint256 donationAmount = (swapAmount * _hookDonationPercentage) / DONATION_DENOMINATOR;
-        
-        // Only proceed if donation amount is meaningful
-        if (donationAmount == 0) {
-            return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-        
-        // Determine donation currency based on swap direction
-        // Take donation from the input currency (what user is paying)
-        Currency donationCurrency = params.zeroForOne ? key.currency0 : key.currency1;
-        
-        // MINT: Credit hook with donation amount
-        poolManager.mint(address(this), donationCurrency.toId(), donationAmount);
-        
-        // Create BeforeSwapDelta to tell PoolManager to charge user for this credit
-        BeforeSwapDelta returnDelta = toBeforeSwapDelta(
-            int128(int256(donationAmount)), // Hook receives donation amount
-            0                               // No change to unspecified token
-        );
-        
-        // Store donation info for afterSwap (simple approach)
-        _tempDonationAmount = donationAmount;
-        _tempDonationCurrency = donationCurrency;
-        _tempDonationUser = user;
-        
-        return (BaseHook.beforeSwap.selector, returnDelta, 0);
-    }
-
-    // Transfer collected donations to charity after swap
+    // Collect donation using afterSwap pattern (calculates fee from actual output)
     function _afterSwap(
         address sender,
         PoolKey calldata key,
@@ -186,23 +153,50 @@ contract SimpleTempleHook is BaseHook {
         BalanceDelta delta,
         bytes calldata hookData
     ) internal override returns (bytes4, int128) {
-        // Only proceed if we have a donation to process
-        if (_tempDonationAmount > 0) {
-            // BURN: Remove credits from hook's account
-            poolManager.burn(address(this), _tempDonationCurrency.toId(), _tempDonationAmount);
-            
-            // TAKE: Transfer actual tokens to charity
-            poolManager.take(_tempDonationCurrency, QUBIT_ADDRESS, _tempDonationAmount);
+        // Extract user address from hookData for event (optional)
+        address user = hookData.length >= 20 ? abi.decode(hookData, (address)) : sender;
 
-            // EMIT: Event with user attribution, charity EIN, tax receipt statement, and timestamp
-            emit CharitableDonationTaken(_tempDonationUser, key.toId(), _tempDonationCurrency, _tempDonationAmount, QUBIT_EIN, TAX_RECEIPT_STATEMENT, block.timestamp);
+        // Determine which currency is the output (unspecified for exactInput, specified for exactOutput)
+        bool outputIsToken0 = params.zeroForOne ? false : true;
 
-            // Clean up temporary storage
-            _tempDonationAmount = 0;
-            _tempDonationCurrency = Currency.wrap(address(0));
-            _tempDonationUser = address(0);
+        // Get the output amount from the delta
+        int256 outputAmount = outputIsToken0 ? delta.amount0() : delta.amount1();
+
+        // Output amount is positive (pool owes user), we need the absolute value
+        if (outputAmount <= 0) {
+            return (BaseHook.afterSwap.selector, 0);
         }
-        
-        return (BaseHook.afterSwap.selector, 0);
+
+        // Calculate donation as percentage of actual output
+        uint256 donationAmount = (uint256(outputAmount) * _hookDonationPercentage) / DONATION_DENOMINATOR;
+
+        // Only proceed if donation amount is meaningful
+        if (donationAmount == 0) {
+            return (BaseHook.afterSwap.selector, 0);
+        }
+
+        // Ensure donation fits in int128
+        require(donationAmount <= uint256(uint128(type(int128).max)), "Donation too large");
+
+        // Determine output currency for the donation
+        Currency feeCurrency = outputIsToken0 ? key.currency0 : key.currency1;
+
+        // TAKE: Collect the donation from pool and send directly to charity
+        poolManager.take(feeCurrency, _charityAddress, donationAmount);
+
+        // EMIT: Event with user attribution, charity EIN, tax receipt statement, and timestamp
+        emit CharitableDonationTaken(
+            user,
+            key.toId(),
+            feeCurrency,
+            donationAmount,
+            QUBIT_EIN,
+            TAX_RECEIPT_STATEMENT,
+            block.timestamp
+        );
+
+        // Return the donation amount as int128
+        // This tells the PoolManager that the hook took this amount as a fee
+        return (BaseHook.afterSwap.selector, int128(int256(donationAmount)));
     }
 }

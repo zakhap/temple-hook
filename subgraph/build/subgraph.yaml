@@ -1,0 +1,25 @@
+specVersion: 0.0.4
+schema:
+  file: schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: SimpleTempleHook
+    network: base
+    source:
+      address: "0x9894703d41FD1Ff4aA5f88951F07bEcDDD83C044"
+      abi: SimpleTempleHook
+      startBlock: 22600000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - CharitableDonation
+      abis:
+        - name: SimpleTempleHook
+          file: SimpleTempleHook/abis/SimpleTempleHook.abi.json
+      eventHandlers:
+        - event: CharitableDonationTaken(indexed address,indexed bytes32,indexed
+            address,uint256,string,string,uint256)
+          handler: handleCharitableDonation
+      file: SimpleTempleHook/SimpleTempleHook.wasm
